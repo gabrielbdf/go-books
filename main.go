@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -21,8 +23,8 @@ type model struct {
 }
 
 type person struct {
-	name string
-	age  string
+	Name string `json:"name"`
+	Age  string `json:"age"`
 }
 
 var people []person
@@ -64,7 +66,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					name := row[0]
 					indexToDelete := -1
 					for i := 0; i < len(people); i++ {
-						if name == people[i].name {
+						if name == people[i].Name {
 							indexToDelete = i
 						}
 					}
@@ -72,6 +74,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						people = append(people[:indexToDelete], people[indexToDelete+1:]...)
 						m.table.SetRows(getTableRows())
 						m.table.Update(msg)
+						saveDatabase()
 					}
 				}
 			}
@@ -83,10 +86,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if len(values) >= 2 {
 					age = values[1]
 				}
-				people = append(people, person{name: values[0], age: age})
+				people = append(people, person{Name: values[0], Age: age})
 				m.table.SetRows(getTableRows())
 				m.table.Update(msg)
 				m.textInput.SetValue("")
+				saveDatabase()
 			}
 		}
 	}
@@ -111,23 +115,42 @@ func (m model) View() string {
 func getTableRows() []table.Row {
 	rows := []table.Row{}
 	for _, p := range people {
-		rows = append(rows, table.Row{p.name, p.age})
+		rows = append(rows, table.Row{p.Name, p.Age})
 	}
 	return rows
 }
 
+func saveDatabase() {
+	file, err := os.Create("./data/data.json")
+	if err != nil {
+		panic(err)
+	}
+	defer file.Close()
+
+	jsonWriter := json.NewEncoder(file)
+	err = jsonWriter.Encode(people)
+	if err != nil {
+		panic(err)
+	}
+}
+
 func main() {
+
+	database, err := os.ReadFile("./data/data.json")
+	if err != nil {
+		panic(err)
+	}
+	buffer := bytes.NewBuffer(database)
+	json.NewDecoder(buffer).Decode(&people)
 
 	columns := []table.Column{
 		{Title: "Name", Width: 15},
 		{Title: "Age", Width: 15},
 	}
 
-	rows := []table.Row{}
-
 	t := table.New(
 		table.WithColumns(columns),
-		table.WithRows(rows),
+		table.WithRows(getTableRows()),
 		table.WithFocused(true),
 		table.WithHeight(7),
 	)
@@ -145,6 +168,7 @@ func main() {
 	t.SetStyles(s)
 
 	m := model{t, initialModel()}
+
 	if _, err := tea.NewProgram(m).Run(); err != nil {
 		fmt.Println("Error running program:", err)
 		os.Exit(1)
